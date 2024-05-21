@@ -6,11 +6,60 @@ const path = require('path');
 const fs = require('fs');
 const bodyParser = require('body-parser');
 const fileUpload = require('express-fileupload');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('express-session');
+const jwt = require('jsonwebtoken');
+const request = require('request');
 
 const { insertData, getData } = require('./db/art');
-const { login, register } = require('./db/user');
+const { login, register, findOrCreateGoogleUser, getUserById } = require('./db/user');
+
+require('dotenv').config();
 
 const corsOpts = { origin: '*', methods: ['GET', 'POST', 'PUT'], allowedHeaders: ['Content-Type'] };
+
+passport.use(new GoogleStrategy({
+  clientID: process.env.GOOGLE_CLIENT_ID,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/google/callback"
+},
+function(accessToken, refreshToken, profile, cb) {
+  const newUser = {
+    name: profile.displayName, // Имя пользователя
+    googleId: profile.id, // Google ID
+    avatar: profile.photos[0].value // URL аватара пользователя
+  };
+
+  console.log('New user:', newUser);
+
+  findOrCreateGoogleUser({ googleId: profile.id, name: newUser.name, avatar:newUser.avatar}, function (err, user) {
+    return cb(err, user);
+  });
+}
+));
+
+app.use(session({
+  secret: 'your_secret_key', // Секретный ключ для подписи Cookie
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false } // Для HTTPS установите `secure: true`
+}));  
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser(function(user, done) {
+  done(null, user._id);
+  // if you use Model.id as your idAttribute maybe you'd want
+  // done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+User.findById(id, function(err, user) {
+  done(err, user);
+});
+});
 
 app.use(cors(corsOpts));
 
@@ -22,6 +71,36 @@ app.use(fileUpload({
 }));
 
 app.use(express.static(path.join(__dirname, 'uploads')));
+
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/google/callback', 
+  passport.authenticate('google', { failureRedirect: '/login', session: false, scope: ['profile', 'email'] }),
+  async function(req, res) {
+    console.log('User:', req.user)
+
+    const user = await getUserById(req.user.googleId);
+
+    const token = jwt.sign({
+      name: req.user.name,
+      avatar: req.user.avatar,
+      id: req.user.googleId, 
+      user_id: user.id
+    }, 'your_secret_key', { expiresIn: '24h' });
+    res.redirect('http://localhost:4200/member?token=' + token);
+});
+
+app.get('/avatar', async(req, res) => {
+  if (!req.query.id) {
+    return res.status(400).send('Bad request');
+  }
+
+  const user = await getUserById(req.query.id);
+  console.log('User:', user)
+  const imageUrl = user.avatar;
+  request(imageUrl).pipe(res);
+});
 
 let uploadPath;
 let filename;
@@ -42,19 +121,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage })
-
-/*
-app.post('/upload', handleTextFields, upload.single('file'), async(req, res) => {
-  console.log(req.body.description, filename);  
-  if (!req.file) {
-    return res.status(400).send('No files were uploaded.');
-  }
-  insertData(req.body.user_id, path.join(req.body.user_id.toString(), filename), req.body.description, req.body.category)
-    .then()
-    .catch(console.error);
-  res.send('File uploaded successfully');
-});
-*/
 
 app.post('/upload', async(req, res) => {
   console.log(req.body.user_id, req.body.category, req.body.description);

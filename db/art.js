@@ -25,7 +25,13 @@ function getData(params) {
       whereArray.push(`category_id = ${params.category_id}`);
     }
 
-    const sql = `SELECT * FROM art ${whereArray.length > 0 ? 'WHERE ' + whereArray.join(' AND ') : ''}`;
+    const sql = `SELECT art.file_path as file_path, art.description as description,
+                 author.name as author, category.name as category
+                 FROM art 
+                 LEFT JOIN category ON art.category_id = category.id
+                 LEFT JOIN author ON art.author_id = author.id 
+                 ${whereArray.length > 0 ? 'WHERE ' + whereArray.join(' AND ') : ''}
+                `;
     console.log(sql);
     db.all(sql, [], (err, rows) => {
       if (err) {
