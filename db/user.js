@@ -1,15 +1,15 @@
-const { db } = require('./connection');
+const { db, connection } = require('./connection');
   
 function login(name, password) {
     return new Promise((resolve, reject) => {
-      const sql = `SELECT id FROM author WHERE name=? AND password=?`;
+      const sql = `SELECT id, name, googleId, avatar FROM author WHERE name=? AND password=?`;
       console.log(`Поиск пользователя: ${name} ${password}`)
       db.get(sql, [name, password], function(err, result) {
         if (err || !result) {
           reject(err);
         } else {
-          console.log(`Пользователь найден: ${result.id}`);
-          resolve(result.id);
+          console.log(`Пользователь найден: ${JSON.stringify(result)}`);
+          resolve(result);
         }
       });
     });
@@ -64,4 +64,43 @@ function getUserById(id) {
   });
 }
 
-module.exports = { login, register, findOrCreateGoogleUser, getUserById };
+function getUser(id) {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT * FROM author WHERE id=?`;
+    db.get(sql, [id], function(err, result) {
+      if (err || !result) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
+function getAllUsers(id) {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT * FROM author`;
+    connection.query(sql, [id], function(err, result) {
+      if (err || !result) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
+function uploadAvatar(avatar, id) {
+  return new Promise((resolve, reject) => {
+    const sql = `UPDATE author SET avatar=? WHERE id=? AND googleId IS NULL`;
+    db.run(sql, [avatar, id], function(err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this.lastID);
+      }
+    });
+  });
+}
+
+module.exports = { login, register, findOrCreateGoogleUser, getUserById, getAllUsers, uploadAvatar, getUser };

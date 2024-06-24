@@ -13,7 +13,8 @@ const jwt = require('jsonwebtoken');
 const request = require('request');
 
 const { insertData, getData } = require('./db/art');
-const { login, register, findOrCreateGoogleUser, getUserById } = require('./db/user');
+const { login, register, findOrCreateGoogleUser, getUserById, getAllUsers, uploadAvatar, getUser } = require('./db/user');
+const { uploadFileS3 } = require('./utils/s3');
 
 require('dotenv').config();
 
@@ -64,7 +65,7 @@ User.findById(id, function(err, user) {
 app.use(cors(corsOpts));
 
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '100mb' }));
 
 app.use(fileUpload({
   limits: { fileSize: 50 * 1024 * 1024 },
@@ -92,7 +93,8 @@ app.get('/auth/google/callback',
 });
 
 app.get('/avatar', async(req, res) => {
-  if (!req.query.id) {
+  console.log('Query:', req.query.id)
+  if (!req.query.id || isNaN(req.query.id)) {
     return res.status(400).send('Bad request');
   }
 
@@ -127,6 +129,16 @@ app.post('/upload', async(req, res) => {
   console.log(req.files.file.name);
 
   const file = req.files.file;
+
+  const params = {
+    Bucket: 'art-storage-all',
+    Key: file.name,
+    Body: file.data,
+    ContentType: file.mimetype
+  };
+
+  //const location = await uploadFileS3(params);
+
   const uploadPath = path.join(__dirname, 'uploads', String(req.body.user_id));
   try {
     fs.mkdirSync(uploadPath, { recursive: true });
@@ -152,6 +164,8 @@ app.get('/images', async(req, res) => {
 });
 
 app.get('/', async(req, res) => {
+    const users = await getAllUsers();
+    console.log('Users:', users);
     res.send('Healtcheck');
 });
 
@@ -161,7 +175,16 @@ app.post('/login', async(req, res) => {
   console.log('Password:', password);
   try {
     const result = await login(username, password);
-    res.send({ status: 200, id: result });
+    console.log('Result:', result);
+
+    const token = jwt.sign({
+      name: result.name,
+      avatar: result.avatar,
+      id: result.googleId, 
+      user_id: result.id
+    }, 'your_secret_key', { expiresIn: '24h' });
+
+    res.send({ status: 200, id: result['id'], token });
   } catch(e) {
     console.error(e);
     res.send({ status: 500 });
@@ -180,6 +203,29 @@ app.post('/register', async(req, res) => {
     res.send({ status: 500 });
   }
 });
+
+app.post('/upload-user', async(req, res) => {
+  console.log(req.body);
+  try {
+    await uploadAvatar(req.body.avatar, req.body.userId)
+      
+      const user = await getUser(req.body.userId);
+
+      const token = jwt.sign({
+        name: user.name,
+        avatar: user.avatar,
+        id: null, 
+        user_id: user.id
+      }, 'your_secret_key', { expiresIn: '24h' });
+
+      res.status(200).json({ token });
+  } catch(e) {
+    console.error(e);
+    res.status(500);
+  }
+  
+
+});  
 
 app.listen(3000, () => {
   console.log('Server is running on http://localhost:3000');

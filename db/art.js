@@ -16,9 +16,9 @@ function insertData(author, filename, description, category) {
 
 function getData(params) {
   return new Promise((resolve, reject) => {
-    
+    console.log(params);
     const whereArray = [];
-    if (params.user_id) {
+    if (params.user_id && params.user_id !== 'undefined') {
       whereArray.push(`author_id = ${params.user_id}`);
     }
     if (params.category_id) {
