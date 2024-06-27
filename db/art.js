@@ -25,8 +25,8 @@ function getData(params) {
       whereArray.push(`category_id = ${params.category_id}`);
     }
 
-    const sql = `SELECT art.file_path as file_path, art.description as description,
-                 author.name as author, category.name as category
+    const sql = `SELECT art.id as id, art.file_path as file_path, art.description as description,
+                 author.name as author, category.name as category, likes
                  FROM art 
                  LEFT JOIN category ON art.category_id = category.id
                  LEFT JOIN author ON art.author_id = author.id 
@@ -43,6 +43,47 @@ function getData(params) {
   });
 }
 
+function setLike(artId, likes) {
+  return new Promise((resolve, reject) => {
+    const sql = `UPDATE art SET likes = ? WHERE id = ?`;
+    db.run(sql, [likes, artId], function(err) {
+      if (err) {
+        reject(err);
+      } else {
+        console.log(`Лайк добавлен: ${this.lastID}`);
+        resolve(this.lastID);
+      }
+    });
+  });
+}
+
+
+function getArtById(id) {
+  return new Promise((resolve, reject) => {
+    const sql = `SELECT * FROM art WHERE id=?`;
+    db.get(sql, [id], function(err, result) {
+      if (err || !result) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
+
+function deleteArtById(id) {
+  return new Promise((resolve, reject) => {
+    const sql = `DELETE FROM art WHERE id=?`;
+    db.run(sql, [id], function(err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this.lastID);
+      }
+    });
+  });
+}
+
 /*
 db.close((err) => {
     if (err) {
@@ -51,4 +92,4 @@ db.close((err) => {
     console.log('Соединение с базой данных закрыто.');
 });
 */
-module.exports = { insertData, getData };
+module.exports = { insertData, getData, setLike, getArtById, deleteArtById };

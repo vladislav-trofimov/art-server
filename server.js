@@ -12,13 +12,13 @@ const session = require('express-session');
 const jwt = require('jsonwebtoken');
 const request = require('request');
 
-const { insertData, getData } = require('./db/art');
+const { insertData, getData, setLike, getArtById, deleteArtById } = require('./db/art');
 const { login, register, findOrCreateGoogleUser, getUserById, getAllUsers, uploadAvatar, getUser } = require('./db/user');
 const { uploadFileS3 } = require('./utils/s3');
 
 require('dotenv').config();
 
-const corsOpts = { origin: '*', methods: ['GET', 'POST', 'PUT'], allowedHeaders: ['Content-Type'] };
+const corsOpts = { origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'], allowedHeaders: ['Content-Type'] };
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
@@ -226,6 +226,41 @@ app.post('/upload-user', async(req, res) => {
   
 
 });  
+
+app.post('/likes', async(req, res) => {
+  console.log(req.body);
+  try {
+    await setLike(req.body.id, req.body.likes)
+    res.send({ status: 200});
+  } catch(e) {
+    console.error(e);
+    res.status(500);
+  }
+}); 
+
+app.delete('/image', async(req, res) => {
+  console.log(req.query.id);
+  try {
+    const art = await getArtById(req.query.id);
+
+    const filePath = path.join(__dirname, 'uploads', art.file_path);
+
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error('Error deleting the file:', err);
+      } else {
+        console.log('File deleted successfully');
+        deleteArtById(req.query.id).then().catch(console.error);
+      }
+    });
+
+    console.log('Path:', filePath);
+    res.send({ status: 200});
+  } catch(e) {
+    console.error(e);
+    res.status(500);
+  }
+});
 
 app.listen(3000, () => {
   console.log('Server is running on http://localhost:3000');
